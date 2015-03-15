@@ -1,0 +1,48 @@
+# docker-compose for OpenVPN+Transparent Proxy (including Virus Scan and Blacklists)
+
+clamav:
+  hostname: clamav
+  image: sweitzel/vpnbox-clamav
+  expose:
+    - "3310/tcp"
+
+cicap:
+  hostname: cicap
+  image: sweitzel/vpnbox-cicap
+  links:
+    - clamav
+  expose:
+    - "1344/tcp"
+
+# create squid_data container: docker run --name=squid_data vpnbox/squid --init
+squid:
+  hostname: squid
+  image: sweitzel/vpnbox-squid
+  links:
+    - cicap
+    - openvpn
+  volumes_from:
+    - squid_data
+  expose:
+    - "3128/tcp"
+    - "3129/tcp"
+    - "3130/tcp"
+  cap_add:
+    - NET_ADMIN
+
+# in order for openvpn to start, needs to be initialized first interactively
+#   Create data container with CA: docker run --name=ovpn_data vpnbox/openvpn --init udp://vpn.life-ends.com:5443
+#   Create client config:  docker run -ti --rm --volumes-from=ovpn_data vpnbox/openvpn --getclient client01
+#
+#  Note: Until circular references are allowed by Docker, linking to squid doesnt work:
+#  links:
+#    - squid
+openvpn:
+  hostname: openvpn
+  image: sweitzel/vpnbox-openvpn
+  volumes_from:
+    - ovpn_data
+  cap_add:
+    - NET_ADMIN
+  ports:
+    - "5443:1194/udp"

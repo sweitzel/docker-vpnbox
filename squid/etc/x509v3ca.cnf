@@ -1,0 +1,19 @@
+[ req ]
+default_bits         = 2048
+default_md           = sha256
+default_keyfile      = bumpy-ca.key
+distinguished_name   = req_distinguished_name
+attributes           = req_attributes
+x509_extensions      = v3_ca
+string_mask          = nombstr
+
+[ req_distinguished_name ]
+
+[ req_attributes ]
+
+[ v3_ca ]
+basicConstraints     = critical,CA:true
+nsCertType           = critical,sslCA
+extendedKeyUsage     = critical,serverAuth,clientAuth,emailProtection,timeStamping,msCodeInd,msCodeCom,msCTLSign,msSGC,msEFS,nsSGC
+keyUsage             = keyCertSign, cRLSign
+subjectKeyIdentifier = hash
