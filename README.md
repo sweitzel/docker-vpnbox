@@ -6,6 +6,9 @@ This creates several containers to server as VPN server with transparent proxy c
 The OpenVPN container will forward all HTTP (Port 80) / HTTPS (Port 443) traffic to the Squid container. All other VPN traffic will be SNAT'd.
 Squid is configured to scan all traffic via ClamAV for Virii and against Google Safebrowsing database. Additionally the Shallalist blacklist is configured.
 
+I currently do not plan to push the individual container images to Docker Hub. The reason is, that hierachies/dependencies are not currently possible (AFAIK).
+However it is easy to build the images your self, and instruction given  below.
+
 > It has been tested on Windows OpenVPN client as well as IOS 8.2
 
 ```
@@ -45,31 +48,39 @@ Squid is configured to scan all traffic via ClamAV for Virii and against Google 
 
 > Requires [Docker](https://docs.docker.com/) 1.5 or later, and [Docker Compose](https://docs.docker.com/compose/) 1.1.0 or later
 
+### Build containers
+
+* Obtain the GIT structure (as [.zip](https://github.com/sweitzel/docker-vpnbox/archive/master.zip) or use [GIT](https://github.com/sweitzel/docker-vpnbox.git))
+* Change to the docker-vpnbox directory, then build:
+```bash
+docker-compose -f docker-compose-build.yml -p vpnbox build
+```
+
 ### Setup OpenVPN container
 
 * Create data container for OpenVPN (store the CA and some more data persistently)
 ```bash
-docker run --name=ovpn_data sweitzel/vpnbox-openvpn --entrypoint bash echo ovpn_data
+docker run --name=ovpn_data vpnbox-openvpn --entrypoint bash echo ovpn_data
 ```
 
 * Initialize OpenVPN CA (has to run interactively)
 ```bash
-docker run -ti --rm --volumes-from=ovpn_data sweitzel/vpnbox-openvpn --init=udp://vpn.my-server.com:5443
+docker run -ti --rm --volumes-from=ovpn_data vpnbox-openvpn --init=udp://vpn.my-server.com:5443
 ```
-    > Note: Some password choices will be offered. Make sure to store the CA password somewhere safely, you need it again to create Client certificates
+> Note: Some password choices will be offered. Make sure to store the CA password somewhere safely, you need it again to create Client certificates
 
 ### Setup Squid container
 
 * Create data container for Squid (stores CA and some more data persistently)
 ```bash
-docker run --name=squid_data sweitzel/vpnbox-squid --entrypoint bash echo squid_data
+docker run --name=squid_data vpnbox-squid --entrypoint bash echo squid_data
 ```
 
 * Initialize Squid
 ```bash
-docker run -ti --rm --volumes-from squid_data sweitzel/vpnbox-squid --init
+docker run -ti --rm --volumes-from squid_data vpnbox-squid --init
 ```
-    > Note: This process will output the CA, you should safe it for later (if not you can still retrieve it with --getca).
+> Note: This process will output the CA, you should safe it for later (if not you can still retrieve it with --getca).
 
 ### Starting up
 
@@ -77,7 +88,7 @@ docker run -ti --rm --volumes-from squid_data sweitzel/vpnbox-squid --init
 ```bash
 docker-compose -f <path_to>/docker-compose.yml
 ```
-    > Note: Make sure to read the output, and if everything went well, the containers keep running
+> Note: Make sure to read the output, and if everything went well, the containers keep running
 
 * Currently cross-links between containers are not supported by docker-compose. Thus we need to run:
 
@@ -89,9 +100,11 @@ docker exec -t vpnbox_openvpn_1 --post-run=$(docker inspect --format '{{ .Networ
 
 * Add a client to certificate store
 ```bash
-docker run -ti --rm --volumes-from=ovpn_data sweitzel/vpnbox-openvpn --getclient=<client_cn>
+docker run -ti --rm --volumes-from=ovpn_data vpnbox-openvpn --getclient=<client_cn>
 ```
-    > Note: Feel free to use a descriptive string of the purpose of the VPN client
+
+> Note: Feel free to use a descriptive string of the purpose of the VPN client
+
 * Save the programs output as *.ovpn file
 
 ### Windows VPN client
@@ -116,17 +129,6 @@ docker run -ti --rm --volumes-from=ovpn_data sweitzel/vpnbox-openvpn --getclient
 * Squid CA to prevent SSL errors
     * Install iPhone Configuration Utility on [MacOS](https://itunes.apple.com/us/app/apple-configurator/id434433123?mt=12) / [Windows](http://download.cnet.com/iPhone-Configuration-Utility-for-Windows/3000-20432_4-10969175.html)
     * Create a profile and add the Squid CA to the certificate store. Then assign the profile to your device.
-
-### Building Images yourself
-
-The default docker-compose.yml file is refering to the ready-to-use Images from the Docker Hub.
-If one wants to modify the stuff, or just be sure that the content is "safe" use the dockerfile-build.yml.
-
-* Download snapshot from https://github.com/sweitzel/docker-vpnbox
-* Extract, change to the directory, and finally build using:
-```bash
-docker-compose -f <path_to>/docker-compose-build.yml build
-```
 
 ### Verification on Client
 
