@@ -56,7 +56,7 @@ docker run --name=ovpn_data sweitzel/vpnbox-openvpn --entrypoint bash echo ovpn_
 ```bash
 docker run -ti --rm --volumes-from=ovpn_data sweitzel/vpnbox-openvpn --init=udp://vpn.my-server.com:5443
 ```
-    > Note: Some password choices will be offered. Make sure to store the CA password somewhere safely, you need it again to create Client certificates
+> Note: Some password choices will be offered. Make sure to store the CA password somewhere safely, you need it again to create Client certificates
 
 ### Setup Squid container
 
@@ -69,7 +69,7 @@ docker run --name=squid_data sweitzel/vpnbox-squid --entrypoint bash echo squid_
 ```bash
 docker run -ti --rm --volumes-from squid_data sweitzel/vpnbox-squid --init
 ```
-    > Note: This process will output the CA, you should safe it for later (if not you can still retrieve it with --getca).
+> Note: This process will output the CA, you should safe it for later (if not you can still retrieve it with --getca).
 
 ### Starting up
 
@@ -77,7 +77,7 @@ docker run -ti --rm --volumes-from squid_data sweitzel/vpnbox-squid --init
 ```bash
 docker-compose -f <path_to>/docker-compose.yml
 ```
-    > Note: Make sure to read the output, and if everything went well, the containers keep running
+> Note: Make sure to read the output, and if everything went well, the containers keep running
 
 * Currently cross-links between containers are not supported by docker-compose. Thus we need to run:
 
@@ -91,7 +91,7 @@ docker exec -t vpnbox_openvpn_1 --post-run=$(docker inspect --format '{{ .Networ
 ```bash
 docker run -ti --rm --volumes-from=ovpn_data sweitzel/vpnbox-openvpn --getclient=<client_cn>
 ```
-    > Note: Feel free to use a descriptive string of the purpose of the VPN client
+> Note: Feel free to use a descriptive string of the purpose of the VPN client
 * Save the programs output as *.ovpn file
 
 ### Windows VPN client
@@ -105,7 +105,7 @@ docker run -ti --rm --volumes-from=ovpn_data sweitzel/vpnbox-openvpn --getclient
     - pick local user as install destination
     - select "Trusted Root Certification Authorities" / "Vertrauenswürdige Stammzertifizierungsstellen" as store
     - verify in Internet Explorer that e.g. on https://www.google.com no certificate error is popping up anymore
-      (note: Google Chrome is using also the Windows store)
+      (Note: Google Chrome is using also the Windows store)
     - Firefox uses its own Cert store (Settings -> Extended -> Certificates)
 
 ### IOS
