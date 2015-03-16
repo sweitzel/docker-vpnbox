@@ -53,19 +53,19 @@ However it is easy to build the images your self, and instruction given  below.
 * Obtain the GIT structure (as [.zip](https://github.com/sweitzel/docker-vpnbox/archive/master.zip) or use [GIT](https://github.com/sweitzel/docker-vpnbox.git))
 * Change to the docker-vpnbox directory, then build:
 ```bash
-docker-compose -f docker-compose-build.yml -p vpnbox build
+docker-compose -p vpnbox build
 ```
 
 ### Setup OpenVPN container
 
 * Create data container for OpenVPN (store the CA and some more data persistently)
 ```bash
-docker run --name=ovpn_data vpnbox-openvpn --entrypoint bash echo ovpn_data
+docker run --name=ovpn_data --entrypoint=echo vpnbox_openvpn ovpn_data
 ```
 
 * Initialize OpenVPN CA (has to run interactively)
 ```bash
-docker run -ti --rm --volumes-from=ovpn_data vpnbox-openvpn --init=udp://vpn.my-server.com:5443
+docker run -ti --rm --volumes-from=ovpn_data vpnbox_openvpn --init=udp://vpn.my-server.com:5443
 ```
 > Note: Some password choices will be offered. Make sure to store the CA password somewhere safely, you need it again to create Client certificates
 
@@ -73,12 +73,12 @@ docker run -ti --rm --volumes-from=ovpn_data vpnbox-openvpn --init=udp://vpn.my-
 
 * Create data container for Squid (stores CA and some more data persistently)
 ```bash
-docker run --name=squid_data vpnbox-squid --entrypoint bash echo squid_data
+docker run --name=squid_data --entrypoint=echo vpnbox_squid squid_data
 ```
 
 * Initialize Squid
 ```bash
-docker run -ti --rm --volumes-from squid_data vpnbox-squid --init
+docker run -ti --rm --volumes-from squid_data vpnbox_squid --init
 ```
 > Note: This process will output the CA, you should safe it for later (if not you can still retrieve it with --getca).
 
@@ -86,21 +86,22 @@ docker run -ti --rm --volumes-from squid_data vpnbox-squid --init
 
 * After steps above have been executed, the containers can be started
 ```bash
-docker-compose -f <path_to>/docker-compose.yml
+docker-compose -p vpnbox up
 ```
+
 > Note: Make sure to read the output, and if everything went well, the containers keep running
 
 * Currently cross-links between containers are not supported by docker-compose. Thus we need to run:
 
 ```bash
-docker exec -t vpnbox_openvpn_1 --post-run=$(docker inspect --format '{{ .NetworkSettings.IPAddress }}' vpnbox_squid_1)
+docker exec -t vpnbox_openvpn_1 ovpn_post_run.sh $(docker inspect --format '{{ .NetworkSettings.IPAddress }}' vpnbox_squid_1
 ```
 
 ## Setting up Clients
 
 * Add a client to certificate store
 ```bash
-docker run -ti --rm --volumes-from=ovpn_data vpnbox-openvpn --getclient=<client_cn>
+docker run -ti --rm --volumes-from=ovpn_data vpnbox_openvpn --getclient=<client_cn>
 ```
 
 > Note: Feel free to use a descriptive string of the purpose of the VPN client

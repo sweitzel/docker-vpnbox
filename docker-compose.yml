@@ -2,22 +2,22 @@
 
 clamav:
   hostname: clamav
-  image: sweitzel/vpnbox-clamav
+  build: ./clamav/
   expose:
     - "3310/tcp"
 
 cicap:
   hostname: cicap
-  image: sweitzel/vpnbox-cicap
+  build: ./cicap/
   links:
     - clamav
   expose:
     - "1344/tcp"
 
-# create squid_data container: docker run --name=squid_data vpnbox/squid --init
+# create squid_data container: docker run --name=squid_data vpn-box/squid --init
 squid:
   hostname: squid
-  image: sweitzel/vpnbox-squid
+  build: ./squid/
   links:
     - cicap
     - openvpn
@@ -31,15 +31,15 @@ squid:
     - NET_ADMIN
 
 # in order for openvpn to start, needs to be initialized first interactively
-#   Create data container with CA: docker run --name=ovpn_data vpnbox/openvpn --init udp://vpn.life-ends.com:5443
-#   Create client config:  docker run -ti --rm --volumes-from=ovpn_data vpnbox/openvpn --getclient client01
+#   Create data container with CA: docker run --name=ovpn_data vpn-box/openvpn --init udp://vpn.life-ends.com:5443
+#   Create client config:  docker run -ti --rm --volumes-from=ovpn_data vpn-box/openvpn --getclient client01
 #
 #  Note: Until circular references are allowed by Docker, linking to squid doesnt work:
 #  links:
 #    - squid
 openvpn:
   hostname: openvpn
-  image: sweitzel/vpnbox-openvpn
+  build: ./openvpn/
   volumes_from:
     - ovpn_data
   cap_add:

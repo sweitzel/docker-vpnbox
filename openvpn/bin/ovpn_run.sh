@@ -84,7 +84,7 @@ done
 
 if [ "$MODE" = "init" ]; then
   # init with (public) VPN server url, like udp://vpn.server.com:1194
-  res=`ovpn_init.sh $VALUE`
+  ovpn_init.sh $VALUE
   if [ $? -eq 0 ]; then
     exit 0
   else
@@ -92,7 +92,7 @@ if [ "$MODE" = "init" ]; then
   fi
 elif [ "$MODE" = "getclient" ]; then
   # getclient with CN of client to retrieve/create
-  res=`ovpn_getclient.sh $VALUE`
+  ovpn_getclient.sh $VALUE
   if [ $? -eq 0 ]; then
     exit 0
   else
@@ -100,7 +100,7 @@ elif [ "$MODE" = "getclient" ]; then
   fi
 elif [ "$MODE" = "post-run" ]; then
   # post-run with IP address of Squid container
-  res=`ovpn_post_run.sh $VALUE`
+  ovpn_post_run.sh $VALUE
   if [ $? -eq 0 ]; then
     exit 0
   else
