@@ -118,7 +118,7 @@ docker run -ti --rm --volumes-from=ovpn_data vpnbox-openvpn --getclient=<client_
     - pick local user as install destination
     - select "Trusted Root Certification Authorities" / "Vertrauenswürdige Stammzertifizierungsstellen" as store
     - verify in Internet Explorer that e.g. on https://www.google.com no certificate error is popping up anymore
-      (note: Google Chrome is using also the Windows store)
+      (Note: Google Chrome is using also the Windows store)
     - Firefox uses its own Cert store (Settings -> Extended -> Certificates)
 
 ### IOS
