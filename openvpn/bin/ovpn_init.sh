@@ -63,7 +63,7 @@ EOF
   # generate static key for tls-auth
   run_or_exit "openvpn --genkey --secret $EASYRSA_PKI/ta.key"
   echo "INFO: Generating DH parameters, this might take a little"
-  res=$(time ${EASYRSA}/easyrsa --batch gen-dh 2>&1)
+  run_or_exit "${EASYRSA}/easyrsa --batch gen-dh 2>&1"
 }
 
 function write_server_config {
