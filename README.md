@@ -63,7 +63,7 @@ docker-compose -p vpnbox build
 * Start service once, to build volumes, networks (can be aborted after a minute or so)
 ```bash
 docker-compose -p vpnbox up
-
+```
 * Initialize OpenVPN CA Example (has to run interactively)
 ```bash
 docker run --rm -ti --volume=vpnbox_data:/data --volume=vpnbox_openvpn_priv:/data-priv vpnbox_openvpn --init=udp://vpn.example.com:5443
@@ -99,7 +99,7 @@ docker run -ti --rm --volume=vpnbox_data:/data --volume=vpnbox_openvpn_priv:/dat
 ## Configure Explicit Proxy
 * Configuring proxy explicitly is definetly recommended. Squid bump works generally more reliable with explicit configured proxy.
 * Hint: Use Foxyproxy (Firefox) or similar Proxy switcher utility, to simply turn Proxy on when VPN is enabled.
-** Proxy: IP 192.168.50.5:3128
+    * Proxy: IP 192.168.50.5:3128
 
 ### Windows VPN client
 
