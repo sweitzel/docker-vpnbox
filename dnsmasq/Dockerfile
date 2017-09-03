@@ -9,4 +9,5 @@ RUN apk --no-cache add dnsmasq
 EXPOSE 53 53/udp
 
 # add additional servers with --server=<server>
-ENTRYPOINT ["dnsmasq", "-k"]
+# 127.0.0.11 is the Docker DNS, to enable resolution of Docker internal hostnames by VPN clients
+ENTRYPOINT ["dnsmasq", "-k", "--server=127.0.0.11"]

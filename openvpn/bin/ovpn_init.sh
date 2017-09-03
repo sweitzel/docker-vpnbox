@@ -12,11 +12,12 @@ function run_or_exit {
   echo "INFO: Run \"$cmd\""
   echo "----------------------------------------------------------------- Output begin --"
   eval $*
+  rc=$?
   echo "------------------------------------------------------------------ Output end ---"
-  if [ $? -eq 0 ]; then
+  if [ $rc -eq 0 ]; then
     echo "INFO: Command successfully executed"
   else
-    echo "ERROR: Command failed"
+    echo "ERROR: Command failed (rc=$rc)"
     exit 1
   fi
 }
@@ -30,7 +31,7 @@ function init_pki {
     [ -z "$OVPN_PROTO" ] && OVPN_PROTO=udp
     [ -z "$OVPN_PORT" ] && OVPN_PORT=1194
     # save for reusage
-    cat > /usr/local/openvpn/openvpn.env <<EOF
+    cat > ${VPNCONFIG}/openvpn.env <<EOF
 # some user-defined settings, stored persistently
 export OVPN_SERVER_URL="$1"
 export OVPN_PROTO="$OVPN_PROTO"
@@ -60,10 +61,11 @@ EOF
   run_or_exit "${EASYRSA}/easyrsa --batch --dn-mode=cn_only --req-cn=\"OpenVPN CA\" build-ca"
   # create server key without password, with default cn=server01
   run_or_exit "${EASYRSA}/easyrsa --batch build-server-full \"$OVPN_HOST\" nopass"
-  # generate static key for tls-auth
-  run_or_exit "openvpn --genkey --secret $EASYRSA_PKI/ta.key"
-  echo "INFO: Generating DH parameters, this might take a little"
-  run_or_exit "${EASYRSA}/easyrsa --batch gen-dh 2>&1"
+  # generate static key for tls-crypt
+  run_or_exit "openvpn --genkey --secret $EASYRSA_PKI/tc.key"
+  # Just needed for RSA
+  #echo "INFO: Generating DH parameters, this might take a little"
+  #run_or_exit "${EASYRSA}/easyrsa --batch gen-dh 2>&1"
 }
 
 function write_server_config {
@@ -71,8 +73,7 @@ function write_server_config {
     echo "ERROR: Should not happen"
     exit 1
   fi
-  mkdir -p /usr/local/openvpn/etc
-  cat > /usr/local/openvpn/etc/openvpn.conf <<EOF
+  cat > ${VPNCONFIG}/openvpn.conf <<EOF
 server 10.128.81.0 255.255.255.0
 remote-cert-tls client
 proto udp
@@ -84,33 +85,42 @@ verb 3
 persist-key
 persist-tun
 
-key /usr/local/openvpn/pki/private/${OVPN_HOST}.key
-ca /usr/local/openvpn/pki/ca.crt
-cert /usr/local/openvpn/pki/issued/${OVPN_HOST}.crt
-dh /usr/local/openvpn/pki/dh.pem
-tls-auth /usr/local/openvpn/pki/ta.key
+key ${EASYRSA_PKI}/private/${OVPN_HOST}.key
+ca ${EASYRSA_PKI}/ca.crt
+cert ${EASYRSA_PKI}/issued/${OVPN_HOST}.crt
+# needed for RSA
+#dh ${EASYRSA_PKI}/dh.pem
+dh none
+#tls-crypt ${EASYRSA_PKI}/tc.key
+# Workaround until Openvpn Connect (IOS) supports tls-crypt
+tls-auth ${EASYRSA_PKI}/tc.key
 key-direction 0
 
 max-clients 64
 keepalive 5 30
 tcp-queue-limit 128
-tun-mtu 1500
+#tun-mtu 1500
+#tun-mtu-extra 32
 mssfix 1300
-tun-mtu-extra 32
-#txqueuelen 15000 ; # doesn't work as of docker 1.5
+# txqueuelen 15000 # ; # doesn't work with docker
 
 tls-version-min 1.2
+tls-cipher 'TLS-ECDHE-ECDSA-WITH-AES-256-GCM-SHA384:TLS-ECDHE-ECDSA-WITH-AES-256-CBC-SHA384'
 auth SHA256
 script-security 1
 
-ifconfig-pool-persist /usr/local/openvpn/ifconfig-pool-persist.file
-replay-persist /usr/local/openvpn/replay-persist.file
+ifconfig-pool-persist /data/openvpn/ifconfig-pool-persist.file
+replay-persist /data/openvpn/replay-persist.file
 iproute /usr/local/bin/sudo_ip.sh
-status /tmp/openvpn-status.log
+status /data/openvpn/openvpn-status.log
 
 push "redirect-gateway def1 bypass-dhcp"
-# You could get DNS servers from resolv.conf, but I was too lazy
-push "dhcp-option DNS 8.8.8.8 8.8.4.4"
+push "dhcp-option PROXY_HTTP 192.168.50.5 3128"
+push "dhcp-option PROXY_HTTPS 192.168.50.5 3128"
+# Use DNSMASQ service
+push "dhcp-option DNS 192.168.50.2"
+# prevent DNS leakage https://blog.doenselmann.com/openvpn-dns-leaks-unter-windows/
+push 'block-outside-dns'
 EOF
 }
 
@@ -120,11 +130,11 @@ EOF
 
 OVPN_SERVER_URL=""
 if [ "$1" == "" ]; then
-  if [ -e /usr/local/openvpn/openvpn.env ]; then
-    source /usr/local/openvpn/openvpn.env
+  if [ -e ${VPNCONFIG}/openvpn.env ]; then
+    source ${VPNCONFIG}/openvpn.env
   fi
   if [ -z "$OVPN_SERVER_URL" ]; then
-    echo "ERROR: Need to specify server url, e.g. \"$(basename $0) udp://vpn.server.com:1194\""
+    echo "ERROR: Need to specify server url, e.g. \"$(basename $0) udp://vpn.example.com:1194\""
     exit 1
   fi
 else
@@ -134,21 +144,18 @@ fi
 
 if [ "$1" == "noca" ]; then
   # just initialize the config
-  if [ -e /usr/local/openvpn/openvpn.env ]; then
-    source /usr/local/openvpn/openvpn.env
+  if [ -e ${VPNCONFIG}/openvpn.env ]; then
+    source ${VPNCONFIG}/openvpn.env
   fi
 else
   # rename old CA, maybe its needed ;)
   if [ -d "$EASYRSA_PKI" ]; then
-    tmp=$(date +"%Y%m%d-%H%M%S")
-    mv "$EASYRSA_PKI" "${EASYRSA_PKI}_$tmp"
+    mv "$EASYRSA_PKI" "${EASYRSA_PKI}_$(date +"%Y%m%d-%H%M%S")"
   fi
   init_pki "$OVPN_SERVER_URL"
 fi
 
 write_server_config
-
-run_or_exit "chown -R openvpn:openvpn /usr/local/openvpn"
 
 echo "INFO: Done"
 exit 0

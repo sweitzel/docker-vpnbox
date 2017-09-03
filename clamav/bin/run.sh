@@ -4,6 +4,8 @@
 # Run the clamd and freshclam deamon
 #   monitore the processes and wait for signals to abort childs
 
+#set -ex
+
 # for monitoring jobs
 set -m
 
@@ -34,9 +36,18 @@ for f in clamd.conf freshclam.conf; do
   fi
 done
 
-if [ ! -d "/var/log/clamav" ]; then
-  echo "INFO: Creating log directory"
-  mkdir -p "/var/log/clamav" && chown clamav:clamav "/var/log/clamav"
+if [ ! -d "/data/clamav" ]; then
+  echo "INFO: Creating log directory (/data/clamav)"
+  mkdir -p "/data/clamav" && chown clamav:clamav /data/clamav
+fi
+if [ ! -d "/data/clamav/db" ]; then
+  echo "INFO: Creating db directory (/data/clamav/db)"
+  mkdir -p "/data/clamav/db" && chown clamupdate /data/clamav/db
+fi
+
+if [ ! -e "/data/clamav/main.cld" ]; then
+  echo "INFO: Initial Database Update"
+  /usr/bin/freshclam --config-file=/usr/local/etc/freshclam.conf
 fi
 
 # run in background

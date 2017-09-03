@@ -13,37 +13,68 @@ function run_or_exit {
   echo "INFO: Run \"$cmd\""
   echo "----------------------------------------------------------------- Output begin --"
   eval $*
+  rc=$?
   echo "------------------------------------------------------------------ Output end ---"
-  if [ $? -eq 0 ]; then
+  if [ $rc -eq 0 ]; then
     echo "INFO: Command successfully executed"
   else
-    echo "ERROR: Command failed"
+    echo "ERROR: Command failed (rc=$rc)"
     exit 1
+  fi
+}
+
+function f_get_squid_ip {
+  SQUID_IP=$(getent hosts squid | head -n 1 | cut -d ' ' -f 1)
+  if [ $? -ne 0 ]; then
+    echo 'ERROR: Could not determine Squid IP. Internal Error'
   fi
 }
 
 # setup iptables/routing for intercepting proxy
 function f_setup_intercept {
   OVPN_IP=$(ip route get 8.8.8.8 | awk 'NR==1 {print $NF}')
+  if [[ $? -ne 0 || -z "$OVPN_IP" ]]; then
+    echo 'ERROR: Could not determine own IP. Should not happen.'
+    exit 1
+  fi
   # Dont mark container network traffic
   run_or_exit "iptables -t mangle -A PREROUTING -j ACCEPT -p tcp -m multiport --dports 80,443 -s 172.17.0.0/16"
   run_or_exit "iptables -t mangle -A PREROUTING -j ACCEPT -p tcp -m multiport --dports 80,443 -d 172.17.0.0/16"
 
-
   # Now mark our traffic
-  run_or_exit "iptables -t mangle -A PREROUTING -j MARK --set-mark 1 -p tcp -m multiport --dports 80,443"
+  run_or_exit "iptables -t mangle -A PREROUTING -p tcp -m multiport --dports 80,443 -j MARK --set-mark 1"
 
   # route marked traffic to Squid
   run_or_exit "ip rule add fwmark 1 table 100"
 
   # Source NAT other traffic (e.g. DNS, SSH), except the already marked one
-  run_or_exit "iptables -A POSTROUTING -t nat -m mark --mark 1 -j ACCEPT"
+  run_or_exit "iptables -t nat -A POSTROUTING -m mark --mark 1 -j ACCEPT"
   run_or_exit "iptables -t nat -A POSTROUTING -s 10.128.81.0/24 -o eth0 -j SNAT --to-source $OVPN_IP"
 
-  # Note: the following does not work, until Circular Links are supported by docker
-  #       Run ovpn_post_run.sh <squid_ip> manually
-  #SQUID_IP=$(getent hosts squid | head -n 1 | cut -d ' ' -f 1)
-  #run_or_exit "ip route add default via $SQUID_IP dev eth0 table 100"
+  # same as above, just for IPv6
+  #run_or_exit "ip6tables -t mangle -A PREROUTING -j ACCEPT -p tcp -m multiport --dports 80,443 -s todo"
+  #run_or_exit "ip6tables -t mangle -A PREROUTING -j ACCEPT -p tcp -m multiport --dports 80,443 -d todo"
+  #run_or_exit "ip6tables -t mangle -A PREROUTING -p tcp -m multiport --dports 80,443 -j MARK --set-mark 1"
+  #run_or_exit "ip -f inet6 rule add fwmark 1 table 100"
+  #run_or_exit "ip6tables -t nat -A POSTROUTING -m mark --mark 1 -j ACCEPT"
+  #run_or_exit "ip6tables -t nat -A POSTROUTING -s 10.128.81.0/24 -o eth0 -j SNAT --to-source $OVPN_IP6"
+
+  # wait a bit until the SQUID container is ready and IP can be determined
+  for i in {1..10}; do
+    f_get_squid_ip
+    if [ -n "$SQUID_IP" ]; then
+      break;
+    fi
+    echo .
+    sleep 3
+  done
+  if [ -z "$SQUID_IP" ]; then
+    echo 'ERROR: Could not determine Squid IP. Make sure to start service with docker-compose!'
+    exit 1
+  fi
+  echo "INFO: Determined SQUID_IP=$SQUID_IP ($i tries)"
+  run_or_exit "ip route add default via $SQUID_IP dev eth0 table 100"
+  #run_or_exit "ip -f inet6 route add default via $SQUID_IP6 dev eth0 table 100"
 }
 
 ################################################################################
@@ -76,11 +107,21 @@ do
     *)
       # unknown option
       echo "ERROR: Unknown option $i"
-      echo "Valid: [none] | --init=<vpn_server> | --getclient=<client_cn> | --post-run=<squid_ip>"
+      echo "Valid: [none] | --init=<vpn_server_uri> | --getclient=<client_cn> | --post-run=<squid_ip>"
       exit 1
     ;;
   esac
 done
+
+if [ ! -d "/data" ]; then
+  echo 'ERROR: Public data directory missing, please ensure to start with a data volume mounted at /data!'
+  exit 1
+fi
+if [ ! -d "${VPNCONFIG}" ]; then
+  echo 'ERROR: Private data directory missing, please ensure to start with a data volume mounted at ${VPNCONFIG}!'
+  exit 1
+fi
+run_or_exit "chown -f openvpn ${VPNCONFIG}"
 
 if [ "$MODE" = "init" ]; then
   # init with (public) VPN server url, like udp://vpn.server.com:1194
@@ -98,14 +139,12 @@ elif [ "$MODE" = "getclient" ]; then
   else
     exit 1
   fi
-elif [ "$MODE" = "post-run" ]; then
-  # post-run with IP address of Squid container
-  ovpn_post_run.sh $VALUE
-  if [ $? -eq 0 ]; then
-    exit 0
-  else
-    exit 1
-  fi
+fi
+
+if [ ! -d "/data/openvpn" ]; then
+  echo "INFO: Creating data directory (/data/openvpn)"
+  run_or_exit "mkdir -p /data/openvpn"
+  run_or_exit "chown -f openvpn /data/openvpn"
 fi
 
 # check CA exists
@@ -113,6 +152,7 @@ if [ ! -d "$EASYRSA_PKI" ]; then
   echo "ERROR: CA is not yet created. Run init first, e.g. '--init udp://vpn.server.com:1194'"
   exit 1
 fi
+run_or_exit "chown -R openvpn ${EASYRSA_PKI}"
 
 # check net_admin capability
 res=$(ip link set dev lo down)
@@ -123,7 +163,7 @@ fi
 run_or_exit "ip link set dev lo up"
 
 # check config
-if [ ! -e "/usr/local/openvpn/etc/openvpn.conf" ]; then
+if [ ! -e "${VPNCONFIG}/openvpn.conf" ]; then
   echo "ERROR: openvpn.conf missing!"
   exit 1
 fi
@@ -148,7 +188,5 @@ run_or_exit "openvpn --mktun --dev tun0 --dev-type tun --user openvpn --group op
 
 f_setup_intercept
 
-run_or_exit "chown -R openvpn:openvpn /usr/local/openvpn"
-
 # run as non-root
-exec su openvpn -s /bin/sh --command="openvpn --cd /tmp --config /usr/local/openvpn/etc/openvpn.conf"
+exec su openvpn -s /bin/sh --command="openvpn --cd /data/openvpn --config ${VPNCONFIG}/openvpn.conf"

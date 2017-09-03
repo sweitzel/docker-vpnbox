@@ -3,6 +3,7 @@
 #
 # Generate client certificate and return a config to be stored as .ovpn file
 #
+set -ex
 
 set -o errexit
 
@@ -14,11 +15,12 @@ function run_or_exit {
   echo "INFO: Run \"$cmd\""
   echo "----------------------------------------------------------------- Output begin --"
   eval $*
+  rc=$?
   echo "------------------------------------------------------------------ Output end ---"
-  if [ $? -eq 0 ]; then
+  if [ $rc -eq 0 ]; then
     echo "INFO: Command successfully executed"
   else
-    echo "ERROR: Command failed"
+    echo "ERROR: Command failed (rc=$rc)"
     exit 1
   fi
 }
@@ -28,8 +30,8 @@ function get_client_config {
     echo "ERROR: Specify Client CN as parameter!"
     exit 1
   fi
-  if [ -e /usr/local/openvpn/openvpn.env ]; then
-    source /usr/local/openvpn/openvpn.env
+  if [ -e ${VPNCONFIG}/openvpn.env ]; then
+    source ${VPNCONFIG}/openvpn.env
   fi
   if [ -z "$OVPN_HOST" ]; then
     echo "ERROR: Please run ovpn_init.sh script before!"
@@ -68,9 +70,6 @@ remote-cert-tls server
 persist-key
 persist-tun
 
-tun-mtu 1500
-mssfix 1300
-
 tls-version-min 1.2
 auth SHA256
 
@@ -84,7 +83,7 @@ $(openssl x509 -in $EASYRSA_PKI/issued/${1}.crt)
 $(cat $EASYRSA_PKI/private/${1}.key)
 </key>
 <tls-auth>
-$(cat $EASYRSA_PKI/ta.key)
+$(cat $EASYRSA_PKI/tc.key)
 </tls-auth>
 key-direction 1
 # anything else?

@@ -1,48 +1,110 @@
+---
 # docker-compose for OpenVPN+Transparent Proxy (including Virus Scan and Blacklists)
 
-clamav:
-  hostname: clamav
-  build: ./clamav/
-  expose:
-    - "3310/tcp"
+version: '3'
 
-cicap:
-  hostname: cicap
-  build: ./cicap/
-  links:
-    - clamav
-  expose:
-    - "1344/tcp"
+volumes:
+  # All: logs, ClamAV db
+  data:
+  # OpenVPN private data: VPN CA + client certificates
+  openvpn_priv:
+  # Squid private data: Squid SSL bump CA,
+  squid_priv:
 
-# create squid_data container: docker run --name=squid_data vpn-box/squid --init
-squid:
-  hostname: squid
-  build: ./squid/
-  links:
-    - cicap
-    - openvpn
-  volumes_from:
-    - squid_data
-  expose:
-    - "3128/tcp"
-    - "3129/tcp"
-    - "3130/tcp"
-  cap_add:
-    - NET_ADMIN
+networks:
+  main:
+    driver: bridge
+    # enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+      -
+        subnet: 192.168.50.0/24
 
-# in order for openvpn to start, needs to be initialized first interactively
-#   Create data container with CA: docker run --name=ovpn_data vpn-box/openvpn --init udp://vpn.life-ends.com:5443
-#   Create client config:  docker run -ti --rm --volumes-from=ovpn_data vpn-box/openvpn --getclient client01
-#
-#  Note: Until circular references are allowed by Docker, linking to squid doesnt work:
-#  links:
-#    - squid
-openvpn:
-  hostname: openvpn
-  build: ./openvpn/
-  volumes_from:
-    - ovpn_data
-  cap_add:
-    - NET_ADMIN
-  ports:
-    - "5443:1194/udp"
+services:
+  dnsmasq:
+    hostname: dnsmasq
+    image: vpnbox_dnsmasq:latest
+    build: ./dnsmasq/
+    expose:
+      - "53/tcp"
+      - "53/udp"
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - data:/data
+    networks:
+      main:
+        ipv4_address: 192.168.50.2
+
+  clamav:
+    hostname: clamav
+    image: vpnbox_clamav:latest
+    build: ./clamav/
+    expose:
+      - "3310/tcp"
+    volumes:
+      - data:/data
+    networks:
+      main:
+        ipv4_address: 192.168.50.3
+
+  cicap:
+    hostname: cicap
+    image: vpnbox_cicap:latest
+    build: ./cicap/
+    depends_on:
+      - clamav
+    expose:
+      - "1344/tcp"
+    volumes:
+      - data:/data
+    networks:
+      main:
+        ipv4_address: 192.168.50.4
+
+  # Create Squid data container:
+  #   > docker run -ti --rm --volume=dockervpnbox_data:/data --volume=dockervpnbox_squid_priv:/data-priv vpnbox_squid --init
+  # Get already create Squid CA, to be trusted by Browsers:
+  #   > docker run -ti --rm --volume=dockervpnbox_data:/data --volume=dockervpnbox_squid_priv:/data-priv vpnbox_squid --getca
+  squid:
+    hostname: squid
+    image: vpnbox_squid:latest
+    build: ./squid/
+    depends_on:
+      - cicap
+      - openvpn
+    expose:
+      - "3128/tcp"
+      - "3129/tcp"
+      - "3130/tcp"
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - data:/data
+      - squid_priv:/data-priv
+    networks:
+      main:
+        ipv4_address: 192.168.50.5
+
+  # in order for openvpn to start, needs to be initialized first interactively
+  #   Create data container with CA:
+  #     > docker run -ti --rm --volume=dockervpnbox_data:/data --volume=dockervpnbox_openvpn_priv:/data-priv vpnbox_openvpn --init=udp://vpn.example.com:5443
+  #   Create client config:
+  #     > docker run -ti --rm --volume=dockervpnbox_data:/data --volume=dockervpnbox_openvpn_priv:/data-priv vpn-box/openvpn --getclient client01
+  openvpn:
+    hostname: openvpn
+    image: vpnbox_openvpn:latest
+    build: ./openvpn/
+    depends_on:
+      - dnsmasq
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "5443:1194/udp"
+    volumes:
+      - data:/data
+      - openvpn_priv:/data-priv
+    networks:
+      main:
+        ipv4_address: 192.168.50.6
